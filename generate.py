@@ -2,47 +2,59 @@ import os
 import re
 import urllib.request
 
-def clean_and_save(secret_env_name, output_filename):
-    # 从环境变量中读取隐藏的 URL
+def download_and_clean(secret_env_name, site_name):
     url = os.getenv(secret_env_name)
-    
     if not url:
-        print(f"提示: 环境变量 {secret_env_name} 未设置或为空，跳过此文件。")
-        return
+        print(f"提示: {secret_env_name} 未设置，跳过。")
+        return False
 
-    print(f"正在从 {secret_env_name} 获取原始数据...")
-    
+    print(f"正在下载并清洗 {site_name} 原始数据...")
     try:
-        # 添加 请求头 防止被 GitHub 拦截
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req) as response:
             raw_content = response.read().decode('utf-8')
         
-        # 【核心清洗逻辑】
-        # 1. 如果原始数据挤在了一行（如 DOMAIN-SUFFIX,a.comDOMAIN-SUFFIX,b.com）
-        # 使用正则在 DOMAIN-SUFFIX 或 DOMAIN 前面强制加上换行符
+        # 修复挤在同一行的问题
         formatted_content = re.sub(r'(?<!\n)(DOMAIN(-SUFFIX|-KEYWORD)?|SRC-IP-CIDR|IP-CIDR6?)', r'\n\1', raw_content)
+        lines = formatted_content.splitlines()
         
-        # 2. 按行分割并去除每行前后的空格、回车
-        lines = [line.strip() for line in formatted_content.splitlines()]
-        
-        # 3. 去重且保持原有顺序，同时过滤掉空行
-        seen = set()
-        clean_lines = []
+        clean_domains = []
         for line in lines:
-            if line and line not in seen:
-                seen.add(line)
-                clean_lines.append(line)
-        
-        # 4. 写入文件
-        with open(output_filename, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(clean_lines) + '\n')
+            line = line.strip()
+            if not line:
+                continue
             
-        print(f"成功生成并清洗文件: {output_filename} (共 {len(clean_lines)} 条规则)")
+            # 【核心转换】：将 Mihomo 格式转换为 v2ray-rules-dat 工具认的格式
+            # 例如将 "DOMAIN-SUFFIX,google.com" 转换为 "google.com"
+            # 将 "DOMAIN,api.com" 转换为 "full:api.com"
+            if "DOMAIN-SUFFIX," in line:
+                domain = line.replace("DOMAIN-SUFFIX,", "").strip()
+                clean_domains.append(domain)
+            elif "DOMAIN," in line:
+                domain = line.replace("DOMAIN,", "").strip()
+                clean_domains.append(f"full:{domain}")
+            elif "DOMAIN-KEYWORD," in line:
+                domain = line.replace("DOMAIN-KEYWORD,", "").strip()
+                clean_domains.append(f"keyword:{domain}")
+            else:
+                # 如果已经是纯域名
+                clean_domains.append(line)
+
+        # 去重
+        clean_domains = list(dict.fromkeys(clean_domains))
+
+        # 写入到工具指定的目录：geosite/<文件名>
+        os.makedirs("geosite", exist_ok=True)
+        with open(f"geosite/{site_name}", "w", encoding="utf-8") as f:
+            f.write("\n".join(clean_domains) + "\n")
+            
+        print(f"成功预处理 {site_name}，共 {len(clean_domains)} 条规则。")
+        return True
     except Exception as e:
-        print(f"处理 {output_filename} 时发生异常: {e}")
+        print(f"处理 {site_name} 失败: {e}")
+        return False
 
 if __name__ == "__main__":
-    # 分别处理直连列表和代理列表
-    clean_and_save("LOCAL_LIST_URL", "local.dat")
-    clean_and_save("PROXY_LIST_URL", "proxy.dat")
+    # 我们把生成的组分别命名为 mylocal 和 myproxy
+    download_and_clean("LOCAL_LIST_URL", "mylocal")
+    download_and_clean("PROXY_LIST_URL", "myproxy")
