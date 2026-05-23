@@ -1,0 +1,10 @@
+DOMAIN-SUFFIX,ipw.cn
+DOMAIN-SUFFIX,blog.cloudflare.com
+DOMAIN-SUFFIX,dash.cloudflare.com
+DOMAIN-SUFFIX,developers.cloudflare.com
+DOMAIN-SUFFIX,hostinger.com
+DOMAIN-SUFFIX,ahrefs.com
+DOMAIN-SUFFIX,dsm.imtsui.com
+DOMAIN-SUFFIX,dsm.flutter.fit
+DOMAIN-SUFFIX,freecloud.ltd
+IP-CIDR,172.18.0.0/16,no-resolve
