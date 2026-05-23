@@ -19,19 +19,17 @@ jobs:
           go-version: "1.22"
 
       - name: Clone meta-rules-dat
-        run: |
-          git clone https://github.com/MetaCubeX/meta-rules-dat
-          cp rule-set/*.yaml meta-rules-dat/rule-set/
+        run: git clone https://github.com/MetaCubeX/meta-rules-dat
 
       - name: Build local.dat
         run: |
           cd meta-rules-dat
-          go run ./ --output ../local.dat --rule-set rule-set/local.yaml
+          go run ./ --output ../local.dat --rule-set ../rule-set/local.yaml
 
       - name: Build proxy.dat
         run: |
           cd meta-rules-dat
-          go run ./ --output ../proxy.dat --rule-set rule-set/proxy.yaml
+          go run ./ --output ../proxy.dat --rule-set ../rule-set/proxy.yaml
 
       - name: Commit dat files
         run: |
