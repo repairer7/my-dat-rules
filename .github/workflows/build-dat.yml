@@ -20,33 +20,38 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: 3. 解析 Gist 并转换为编译输入格式
+      - name: 3. 初始化 Go 语言环境
+        uses: actions/setup-go@v5
+        with:
+          go-version: '>=1.20'
+
+      - name: 4. 解析 Gist 并转换为编译输入格式
         env:
           LOCAL_LIST_URL: ${{ secrets.LOCAL_LIST_URL }}
           PROXY_LIST_URL: ${{ secrets.PROXY_LIST_URL }}
         run: python generate.py
 
-      - name: 4. 下载官方 v2ray-rules-dat 编译工具
+      - name: 5. 编译并压制生成二进制 geosite.dat
         run: |
-          # 下载 v2geo 编译器
-          wget https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/v2geo-linux-amd64
-          mv v2geo-linux-amd64 v2geo
-          chmod +x v2geo
-
-      - name: 5. 压制生成二进制 geosite.dat
-        run: |
-          # 编译命令：将 geosite 目录下的文本压缩为二进制单文件 geosite.dat
-          ./v2geo site
+          # 克隆工具源码并进入目录
+          git clone --depth=1 https://github.com/v2fly/domain-list-community.git compiler
+          cd compiler
+          
+          # 将 Python 脚本清洗出的本地文本复制到编译器的 data 目录
+          cp -r ../geosite/* ./data/
+          
+          # 使用 Go 语言执行生成命令，输出至上级目录
+          go run main.go --outputdir=../ --outputfilename=geosite.dat
 
       - name: 6. 清理残留并推送到仓库
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          # 移除不需要提交的临时文本目录和工具
-          rm -rf geosite v2geo
+          # 移除临时生成的文本目录和编译器源码
+          rm -rf geosite compiler
           
-          # 此时仓库里只会产生一个完全加密、二进制的 geosite.dat 文件
+          # 此时仓库里只会存在全新压制出的二进制 geosite.dat 文件
           git add geosite.dat
           
           if ! git diff --staged --quiet; then
