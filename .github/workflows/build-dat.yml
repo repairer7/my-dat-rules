@@ -40,8 +40,8 @@ jobs:
           # 将 Python 脚本清洗出的本地文本复制到编译器的 data 目录
           cp -r ../geosite/* ./data/
           
-          # 使用 Go 语言执行生成命令，输出至上级目录
-          go run main.go --outputdir=../ --outputfilename=geosite.dat
+          # 🌟 修正此处参数：将 -outputfilename 改为 -outputname
+          go run main.go --outputdir=../ --outputname=geosite.dat
 
       - name: 6. 清理残留并推送到仓库
         run: |
