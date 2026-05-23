@@ -1,6 +1,0 @@
-version: 1
-rules:
-  - type: domain
-    behavior: "domain"
-    format: "text"
-    url: "${{ secrets.LOCAL_URL }}"
