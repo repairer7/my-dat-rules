@@ -1,0 +1,44 @@
+name: Build local.dat and proxy.dat
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *"   # 每天凌晨自动运行一次
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Clone meta-rules-dat
+        run: |
+          git clone https://github.com/MetaCubeX/meta-rules-dat
+          cp rule-set/*.yaml meta-rules-dat/rule-set/
+
+      - name: Build local.dat
+        run: |
+          cd meta-rules-dat
+          go run ./ --output ../local.dat --rule-set rule-set/local.yaml
+
+      - name: Build proxy.dat
+        run: |
+          cd meta-rules-dat
+          go run ./ --output ../proxy.dat --rule-set rule-set/proxy.yaml
+
+      - name: Commit dat files
+        run: |
+          mv ../local.dat .
+          mv ../proxy.dat .
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add local.dat proxy.dat
+          git commit -m "Update local.dat and proxy.dat"
+          git push
