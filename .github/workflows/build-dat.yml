@@ -1,48 +1,58 @@
-name: Automatic Rules Deploy
+name: Build Binary GeoSite Dat
 
 on:
   schedule:
-    # 每天北京时间早上 06:00 (UTC 22:00) 自动触发
     - cron: '0 22 * * *'
-  workflow_dispatch: # 支持在 GitHub 页面上手动点击按钮触发
+  workflow_dispatch:
 
 jobs:
-  build-and-push:
+  build-dat:
     runs-on: ubuntu-latest
-    
-    # 🌟 关键修正：强行赋予该工作流对仓库内容的写入权限
     permissions:
       contents: write
-    
+
     steps:
-      - name: 1. 检出仓库代码
+      - name: 1. 检出仓库
         uses: actions/checkout@v4
 
-      - name: 2. 初始化 Python 环境
+      - name: 2. 初始化 Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: 3. 执行 Python 脚本清洗并生成规则
+      - name: 3. 解析 Gist 并转换为编译输入格式
         env:
-          # 从 GitHub Secrets 安全地映射 URL，代码里完全不可见
           LOCAL_LIST_URL: ${{ secrets.LOCAL_LIST_URL }}
           PROXY_LIST_URL: ${{ secrets.PROXY_LIST_URL }}
         run: python generate.py
 
-      - name: 4. 检查变动并自动推送到仓库
+      - name: 4. 下载官方 v2ray-rules-dat 编译工具
+        run: |
+          # 下载 v2geo 编译器
+          wget https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/v2geo-linux-amd64
+          mv v2geo-linux-amd64 v2geo
+          chmod +x v2geo
+
+      - name: 5. 压制生成二进制 geosite.dat
+        run: |
+          # 编译命令：将 geosite 目录下的文本压缩为二进制单文件 geosite.dat
+          ./v2geo site
+
+      - name: 6. 清理残留并推送到仓库
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          # 暂存生成的两个文件
-          git add local.dat proxy.dat
+          # 移除不需要提交的临时文本目录和工具
+          rm -rf geosite v2geo
           
-          # 检查是否有内容更新，防止无意义的提交
+          # 此时仓库里只会产生一个完全加密、二进制的 geosite.dat 文件
+          git add geosite.dat
+          
           if ! git diff --staged --quiet; then
-            git commit -m "chore: 自动更新规则列表 $(date +'%Y-%m-%d %H:%M:%S') [skip ci]"
+            git commit -m "chore: 自动压制二进制 GeoSite $(date +'%Y-%m-%d %H:%M:%S') [skip ci]"
             git push origin main
-            echo ">> 规则已更新并成功推送至仓库。"
+            echo ">> 二进制 dat 文件已成功部署。"
           else
-            echo ">> 检测到规则内容无任何变化，跳过本次推送。"
+            echo ">> 内容无变化，跳过。"
           fi
