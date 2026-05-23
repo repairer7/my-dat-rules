@@ -1,67 +1,63 @@
-name: Build Separate Binary Dats
+import os
+import re
+import urllib.request
 
-on:
-  schedule:
-    - cron: '0 22 * * *'
-  workflow_dispatch:
+def download_and_clean(secret_env_name, file_key):
+    url = os.getenv(secret_env_name)
+    if not url:
+        print(f"提示: {secret_env_name} 未设置，跳过。")
+        return False
 
-jobs:
-  build-dats:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    print(f"正在下载并清洗 {file_key} 原始数据...")
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as response:
+            raw_content = response.read().decode('utf-8')
+        
+        # 修复可能挤在同一行的问题
+        formatted_content = re.sub(r'(?<!\n)(DOMAIN(-SUFFIX|-KEYWORD)?|SRC-IP-CIDR|IP-CIDR6?)', r'\n\1', raw_content)
+        lines = formatted_content.splitlines()
+        
+        clean_domains = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            # 过滤掉不属于域名的 IP 规则
+            if any(ip_keyword in line.upper() for ip_keyword in ["IP-CIDR", "IP-CIDR6", "SRC-IP-CIDR"]):
+                continue
+            if re.search(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', line):
+                continue
 
-    steps:
-      - name: 1. 检出仓库
-        uses: actions/checkout@v4
+            # 转换为 GeoSite 格式 (内部标签统一叫 target)
+            if "DOMAIN-SUFFIX," in line:
+                domain = line.replace("DOMAIN-SUFFIX,", "").strip()
+                clean_domains.append(domain)
+            elif "DOMAIN," in line:
+                domain = line.replace("DOMAIN,", "").strip()
+                clean_domains.append(f"full:{domain}")
+            elif "DOMAIN-KEYWORD," in line:
+                domain = line.replace("DOMAIN-KEYWORD,", "").strip()
+                clean_domains.append(f"keyword:{domain}")
+            else:
+                clean_domains.append(line)
 
-      - name: 2. 初始化 Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+        # 去重
+        clean_domains = list(dict.fromkeys(clean_domains))
 
-      - name: 3. 初始化 Go 语言环境
-        uses: actions/setup-go@v5
-        with:
-          go-version: '>=1.20'
+        # 建立临时目录
+        temp_dir = f"temp_{file_key}/data"
+        os.makedirs(temp_dir, exist_ok=True)
+        with open(f"{temp_dir}/target", "w", encoding="utf-8") as f:
+            f.write("\n".join(clean_domains) + "\n")
+            
+        print(f"成功预处理 {file_key}，共 {len(clean_domains)} 条有效域名规则。")
+        return True
+    except Exception as e:
+        print(f"处理 {file_key} 失败: {e}")
+        return False
 
-      - name: 4. 解析 Gist 并转换为编译输入格式
-        env:
-          LOCAL_LIST_URL: ${{ secrets.LOCAL_LIST_URL }}
-          PROXY_LIST_URL: ${{ secrets.PROXY_LIST_URL }}
-        run: python generate.py
-
-      - name: 5. 分别编译并压制 local.dat 和 proxy.dat
-        run: |
-          # 克隆官方工具源码
-          git clone --depth=1 https://github.com/v2fly/domain-list-community.git compiler
-          cd compiler
-          
-          # 🌟 第一次编译：压制生成独立的二进制 local.dat
-          if [ -d "../temp_local/data" ]; then
-            go run main.go --datapath=../temp_local/data --outputdir=../ --outputname=local.dat
-          fi
-          
-          # 🌟 第二次编译：压制生成独立的二进制 proxy.dat
-          if [ -d "../temp_proxy/data" ]; then
-            go run main.go --datapath=../temp_proxy/data --outputdir=../ --outputname=proxy.dat
-          fi
-
-      - name: 6. 清理残留并推送到仓库
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          
-          # 移除所有临时文本和编译器缓存
-          rm -rf temp_local temp_proxy compiler
-          
-          # 将生成的两份完全加密、二进制的 .dat 文件提交进仓库
-          git add local.dat proxy.dat
-          
-          if ! git diff --staged --quiet; then
-            git commit -m "chore: 自动压制独立二进制 Dat 文件 $(date +'%Y-%m-%d %H:%M:%S') [skip ci]"
-            git push origin main
-            echo ">> 独立的 local.dat 和 proxy.dat 二进制文件已成功部署。"
-          else
-            echo ">> 内容无任何变化，跳过本次推送。"
-          fi
+if __name__ == "__main__":
+    download_and_clean("LOCAL_LIST_URL", "local")
+    download_and_clean("PROXY_LIST_URL", "proxy")
