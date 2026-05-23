@@ -1,0 +1,6 @@
+version: 1
+rules:
+  - type: domain
+    behavior: "domain"
+    format: "text"
+    url: "${{ secrets.PROXY_URL }}"
