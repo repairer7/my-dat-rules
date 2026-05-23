@@ -10,6 +10,10 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     
+    # 🌟 关键修正：强行赋予该工作流对仓库内容的写入权限
+    permissions:
+      contents: write
+    
     steps:
       - name: 1. 检出仓库代码
         uses: actions/checkout@v4
