@@ -23,13 +23,13 @@ jobs:
 
       - name: Build local.dat
         run: |
-          cd meta-rules-dat/cmd/dat
-          go run . --output ../../../local.dat --rule-set ../../../rule-set/local.yaml
+          cd meta-rules-dat/dat
+          go run . --output ../../local.dat --rule-set ../../rule-set/local.yaml
 
       - name: Build proxy.dat
         run: |
-          cd meta-rules-dat/cmd/dat
-          go run . --output ../../../proxy.dat --rule-set ../../../rule-set/proxy.yaml
+          cd meta-rules-dat/dat
+          go run . --output ../../proxy.dat --rule-set ../../rule-set/proxy.yaml
 
       - name: Commit dat files
         run: |
