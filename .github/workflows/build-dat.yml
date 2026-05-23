@@ -1,4 +1,4 @@
-name: Build Binary GeoSite Dat
+name: Build Separate Binary Dats
 
 on:
   schedule:
@@ -6,14 +6,19 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-dat:
+  build-dats:
     runs-on: ubuntu-latest
+    
+    # 🌟 显式声明同时具备读取和写入权限
     permissions:
       contents: write
 
     steps:
       - name: 1. 检出仓库
         uses: actions/checkout@v4
+        with:
+          # 🌟 显式传入内置的 TOKEN，强制解决私有仓库的鉴权 403/128 报错
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 2. 初始化 Python
         uses: actions/setup-python@v5
@@ -31,33 +36,37 @@ jobs:
           PROXY_LIST_URL: ${{ secrets.PROXY_LIST_URL }}
         run: python generate.py
 
-      - name: 5. 编译并压制生成二进制 geosite.dat
+      - name: 5. 分别编译并压制 local.dat 和 proxy.dat
         run: |
-          # 克隆工具源码并进入目录
+          # 克隆官方工具源码
           git clone --depth=1 https://github.com/v2fly/domain-list-community.git compiler
           cd compiler
           
-          # 将 Python 脚本清洗出的本地文本复制到编译器的 data 目录
-          cp -r ../geosite/* ./data/
+          # 第一次编译：压制生成独立的二进制 local.dat
+          if [ -d "../temp_local/data" ]; then
+            go run main.go --datapath=../temp_local/data --outputdir=../ --outputname=local.dat
+          fi
           
-          # 🌟 修正此处参数：将 -outputfilename 改为 -outputname
-          go run main.go --outputdir=../ --outputname=geosite.dat
+          # 第二次编译：压制生成独立的二进制 proxy.dat
+          if [ -d "../temp_proxy/data" ]; then
+            go run main.go --datapath=../temp_proxy/data --outputdir=../ --outputname=proxy.dat
+          fi
 
       - name: 6. 清理残留并推送到仓库
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          # 移除临时生成的文本目录和编译器源码
-          rm -rf geosite compiler
+          # 移除所有临时文本和编译器缓存
+          rm -rf temp_local temp_proxy compiler
           
-          # 此时仓库里只会存在全新压制出的二进制 geosite.dat 文件
-          git add geosite.dat
+          # 将生成的两份完全加密、二进制的 .dat 文件提交进仓库
+          git add local.dat proxy.dat
           
           if ! git diff --staged --quiet; then
-            git commit -m "chore: 自动压制二进制 GeoSite $(date +'%Y-%m-%d %H:%M:%S') [skip ci]"
+            git commit -m "chore: 自动压制独立二进制 Dat 文件 $(date +'%Y-%m-%d %H:%M:%S') [skip ci]"
             git push origin main
-            echo ">> 二进制 dat 文件已成功部署。"
+            echo ">> 独立的 local.dat 和 proxy.dat 二进制文件已成功部署。"
           else
-            echo ">> 内容无变化，跳过。"
+            echo ">> 内容无任何变化，跳过本次推送。"
           fi
