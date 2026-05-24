@@ -8,8 +8,6 @@ on:
 jobs:
   build-dats:
     runs-on: ubuntu-latest
-    
-    # 🌟 显式声明同时具备读取和写入权限
     permissions:
       contents: write
 
@@ -17,7 +15,6 @@ jobs:
       - name: 1. 检出仓库
         uses: actions/checkout@v4
         with:
-          # 🌟 显式传入内置的 TOKEN，强制解决私有仓库的鉴权 403/128 报错
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 2. 初始化 Python
@@ -30,26 +27,34 @@ jobs:
         with:
           go-version: '>=1.20'
 
-      - name: 4. 解析 Gist 并转换为编译输入格式
+      - name: 4. 执行脚本转换规则文本
         env:
           LOCAL_LIST_URL: ${{ secrets.LOCAL_LIST_URL }}
           PROXY_LIST_URL: ${{ secrets.PROXY_LIST_URL }}
-        run: python generate.py
-
-      - name: 5. 分别编译并压制 local.dat 和 proxy.dat
         run: |
-          # 克隆官方工具源码
+          # 转换直连与代理规则
+          python generate.py
+          # 🌟 转换并提取 AdGuardHome 广告规则
+          python adguardhome.py
+
+      - name: 5. 分别编译并压制三份二进制 Dat 文件
+        run: |
           git clone --depth=1 https://github.com/v2fly/domain-list-community.git compiler
           cd compiler
           
-          # 第一次编译：压制生成独立的二进制 local.dat
+          # 第一次编译：压制生成 local.dat
           if [ -d "../temp_local/data" ]; then
             go run main.go --datapath=../temp_local/data --outputdir=../ --outputname=local.dat
           fi
           
-          # 第二次编译：压制生成独立的二进制 proxy.dat
+          # 第二次编译：压制生成 proxy.dat
           if [ -d "../temp_proxy/data" ]; then
             go run main.go --datapath=../temp_proxy/data --outputdir=../ --outputname=proxy.dat
+          fi
+          
+          # 🌟 第三次编译：压制生成全新的广告 adguardhome.dat
+          if [ -d "../temp_adguardhome/data" ]; then
+            go run main.go --datapath=../temp_adguardhome/data --outputdir=../ --outputname=adguardhome.dat
           fi
 
       - name: 6. 清理残留并推送到仓库
@@ -57,16 +62,16 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          # 移除所有临时文本和编译器缓存
-          rm -rf temp_local temp_proxy compiler
+          # 清除所有临时文本目录与编译器
+          rm -rf temp_local temp_proxy temp_adguardhome compiler
           
-          # 将生成的两份完全加密、二进制的 .dat 文件提交进仓库
-          git add local.dat proxy.dat
+          # 暂存所有生成的二进制单文件
+          git add local.dat proxy.dat adguardhome.dat
           
           if ! git diff --staged --quiet; then
-            git commit -m "chore: 自动压制独立二进制 Dat 文件 $(date +'%Y-%m-%d %H:%M:%S') [skip ci]"
+            git commit -m "chore: 自动压制独立二进制(含AdGuardHome) Dat 文件 $(date +'%Y-%m-%d %H:%M:%S') [skip ci]"
             git push origin main
-            echo ">> 独立的 local.dat 和 proxy.dat 二进制文件已成功部署。"
+            echo ">> 所有二进制 .dat 文件已更新并成功推送。"
           else
             echo ">> 内容无任何变化，跳过本次推送。"
           fi
