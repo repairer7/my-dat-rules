@@ -34,7 +34,7 @@ def fetch_and_extract_domains():
             continue
             
         # 核心需求：去除含有 quark (夸克) 关键词的规则
-        if "quark" in line.lower():
+        if any(keyword in line.lower() for keyword in ["quark", "baidu"]):
             continue
             
         extracted_domain = None
